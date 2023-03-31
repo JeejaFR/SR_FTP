@@ -19,7 +19,7 @@ typedef struct{
 
 void handler(){
     printf("\n Déconnecté \n");
-    FILE *log = fopen("log","w");
+    FILE *log = fopen("client/log","w");
     if(telechargement_en_cours==1){
         char telecharge[MAXLINE];
         memset(telecharge,0,MAXLINE);
@@ -105,7 +105,7 @@ void recevoir_fichier(rio_t rio,REQ_MSG *req,int clientfd,int reprise){
 void gestion_reception(rio_t rio,REQ_MSG *req,int clientfd){
     if(strcmp(req->commande,"bye")==0){
         printf("Deconnexion...\n");
-        FILE *log = fopen("log","w");
+        FILE *log = fopen("client/log","w");
         fclose(log);
         Close(clientfd);
         exit(0);
@@ -267,7 +267,7 @@ int main(int argc, char **argv)
      * and the server OS ... but it is possible that the server application
      * has not yet called "Accept" for this connection
      */
-    log = fopen("log","r");
+    log = fopen("client/log","r");
     char nom_fichier[MAXLINE];
     if(log!=NULL){
         if(fgets(nom_fichier,MAXLINE,log) != NULL){ // Dans ce cas, il y a des logs donc on doit reprendre le telechargement.
