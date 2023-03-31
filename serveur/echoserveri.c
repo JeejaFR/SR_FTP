@@ -23,7 +23,7 @@ void handler(int sig){
 
 void echo(int connfd);
 
-void send_file(int connfd,char *nom_fichier){
+void send_file(int connfd,char *nom_fichier,int reprise){
     FILE *fp = fopen(nom_fichier,"r");
     if(fp == NULL){
         Rio_writen(connfd,"Le fichier demandé n'existe pas",sizeof("Le fichier demandé n'existe pas"));
@@ -39,21 +39,37 @@ void send_file(int connfd,char *nom_fichier){
         exit(1);
     }
     off_t tailleAttendue = st.st_size;
-
     char data[TAILLE_BLOC];
     size_t octets_lus = 0;
-    printf("Envoie des données en cours...\n");
+
+    printf("Envoie des données en cours...");
     char tailleEnString[TAILLE_BLOC];
     snprintf(tailleEnString,TAILLE_BLOC,"%ld",tailleAttendue);
-    Rio_writen(connfd,tailleEnString,TAILLE_BLOC);
+
+    if(rio_writen(connfd,tailleEnString,TAILLE_BLOC)==-1){
+        printf("\rEchec de l'envoie, le client s'est deconnecté...\n");
+        fclose(fp);
+        return;
+    }
+    
+
+    // reprendre où on s'est arrété precedemment :
+    while(octets_lus<reprise){
+        size_t n1 = fread(data,1,TAILLE_BLOC,fp);
+        octets_lus+=n1;
+    }
 
     while(!feof(fp)){
         size_t n = fread(data,1,TAILLE_BLOC,fp);
         octets_lus+=n;
-        Rio_writen(connfd,data,TAILLE_BLOC);
+        if(rio_writen(connfd,data,TAILLE_BLOC)==-1){
+            printf("\r Echec de l'envoie , le client s'est deconnecté...\n");
+            fclose(fp);
+            return;
+        }
     }
     fclose(fp);
-    printf("Fichier envoyé !\n");
+    printf("\rFichier envoyé !                                                    \n");
 }
 
 void gerer_demande(int connfd){ // Gestionnaire de commande
@@ -62,21 +78,22 @@ void gerer_demande(int connfd){ // Gestionnaire de commande
     rio_t rio;
 
     //Rio_readinitb(&rio, connfd);
-    
-   while(1){
+
+    while(1){
         Rio_readinitb(&rio, connfd);
         memset(buf,0,MAXLINE);
         memset(temp,0,MAXLINE);
         memset(commande,0,MAXLINE);
         memset(nom_fichier,0,MAXLINE);
         aFichier = 1; // remise à 1 de aFichier pour la prochaine requête
-
+        printf("En attente d'une requete...\n");
         // lire la prochaine requête
         if (Rio_readlineb(&rio, buf, MAXLINE) <= 0) {
             break; // fin de la connexion
         }
-        //printf("buffer : |%s| %ld\n",buf,strlen(buf));
 
+        //printf("buffer : |%s| %ld\n",buf,strlen(buf));
+        printf("reception de la demande : %s \n",buf);
         if(strlen(buf)!=1){
             int i=0;
             if(buf!=NULL){
@@ -117,14 +134,38 @@ void gerer_demande(int connfd){ // Gestionnaire de commande
                     strcpy(chemin,dossier);
                     strcat(chemin,nom_fichier);
 
-                    send_file(connfd,chemin);
+                    send_file(connfd,chemin,0);
                 }  
             }
             else if(strcmp(commande,"bye")==0){
                 printf("Le client %d s'est déconnecté.\n",connfd);
             }
+            else if(strcmp(commande,"reprendre")==0){
+                char *dossier = "serveur/data/";
+                char nom[sizeof(nom_fichier)];  // le nom du fichier
+                char donnee[sizeof(nom_fichier)]; // le nombre d'octet deja reçu par le client
+                i=0;
+                while(nom_fichier[i]!=' '){ // on recupere le nom du fichier
+                    nom[i] = nom_fichier[i];
+                    i++;
+                }
+                i++;
+                int j=0;
+                while(nom_fichier[i]!='\0'){
+                    donnee[j] = nom_fichier[i];
+                    j++;
+                    i++;
+                }
+
+                char *chemin = malloc(strlen(dossier) + strlen(nom_fichier) +1);
+                strcpy(chemin,dossier);
+                strcat(chemin,nom);
+
+                send_file(connfd,chemin,atoi(donnee));
+            }
             else{
                 printf("Commande: %s\nFichier: %s\n",commande,nom_fichier); 
+                exit(1);
             }
         }        
     }
